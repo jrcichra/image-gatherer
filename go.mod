@@ -3,6 +3,7 @@ module github.com/jrcichra/latest-image-gatherer
 go 1.19
 
 require (
+	github.com/blang/semver v3.5.1+incompatible
 	github.com/go-git/go-git/v5 v5.5.1
 	github.com/google/go-containerregistry v0.12.1
 	golang.org/x/sync v0.1.0

@@ -27,7 +27,7 @@ func getTempDir() (string, error) {
 	return os.MkdirTemp("", "")
 }
 
-func (g *Git) Get(ctx context.Context, container string) (string, error) {
+func (g *Git) Get(ctx context.Context, container string) (string, string, error) {
 	tempDir, err := getTempDir()
 	defer func() {
 		err = os.RemoveAll(tempDir)
@@ -36,7 +36,7 @@ func (g *Git) Get(ctx context.Context, container string) (string, error) {
 		}
 	}()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	fullBranchName := fmt.Sprintf("refs/heads/%s", g.Branch)
 
@@ -50,13 +50,13 @@ func (g *Git) Get(ctx context.Context, container string) (string, error) {
 	} else if g.SSH {
 		user, err := user.Current()
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 		// TODO make SSH more configurable
 		homedir := fmt.Sprintf("%s/.ssh/id_rsa", user.HomeDir)
 		auth, err = ssh.NewPublicKeysFromFile("git", homedir, "")
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 	}
 
@@ -67,54 +67,52 @@ func (g *Git) Get(ctx context.Context, container string) (string, error) {
 		Auth:          auth,
 	})
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	repo, err := git.PlainOpen(tempDir)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	ref, err := repo.Reference(plumbing.ReferenceName(fullBranchName), true)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	commit, err := repo.CommitObject(ref.Hash())
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if commit == nil {
-		return "", fmt.Errorf("commit returned was nil")
+		return "", "", fmt.Errorf("commit returned was nil")
 	}
 	fullHash := commit.Hash.String()
 	r, err := registry.NewRegistry(container)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	tags, err := r.GetAllTags(container)
+	tags, err := r.GetAllTags(ctx, container)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	// loop through the tags and see if the hash is in there
 	// TODO improve regex for matching tags to hashes, or expose it
 	var matchedTag string
 	for _, tag := range tags {
 		// clean up the tag
-		tag = strings.TrimPrefix(tag, "sha-")
+		trimmedTag := strings.TrimPrefix(tag, "sha-")
 		// is this tag part of the latest hash?
-		if strings.HasPrefix(fullHash, tag) || strings.HasSuffix(fullHash, tag) {
+		if strings.HasPrefix(fullHash, trimmedTag) || strings.HasSuffix(fullHash, trimmedTag) {
 			// found it
 			matchedTag = tag
 			break
 		}
 	}
-
 	// get the digest for this tag
-	digest, err := r.GetDigestFromTag(container, matchedTag)
+	digest, err := r.GetDigestFromTag(ctx, container, matchedTag)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-
 	// the response should be the full output
-	result := fmt.Sprintf("%s@sha256:%s", container, digest)
-	return result, nil
+	result := fmt.Sprintf("%s@%s", container, digest)
+	return result, matchedTag, nil
 }

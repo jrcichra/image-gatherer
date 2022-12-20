@@ -10,5 +10,5 @@ containers:
       url: https://github.com/jrcichra/bitwarden-secrets-operator.git
       branch: master
   busybox:
-    container: docker.io/busybox
+    container: docker.io/library/busybox
     update_type: semver

@@ -8,6 +8,7 @@ import (
 
 	"github.com/jrcichra/latest-image-gatherer/pkg/config"
 	"github.com/jrcichra/latest-image-gatherer/pkg/output"
+	"github.com/jrcichra/latest-image-gatherer/pkg/plugin"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -15,7 +16,6 @@ import (
 func main() {
 	// load the configuration file
 	c := config.LoadConfigOrDie("config.yml")
-	fmt.Println(c)
 	// make an errgroup which will run through each container
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -26,13 +26,24 @@ func main() {
 		name, entry := name, entry // scoping
 		g.Go(func() error {
 			name, entry := name, entry // scoping
-			switch {
-			case entry.UpdateType == "git":
-				digest, err := entry.Git.Get(ctx, entry.Container)
+			switch entry.UpdateType {
+			case "git":
+				image, tag, err := entry.Git.Get(ctx, entry.Container)
 				if err != nil {
-					return err
+					return fmt.Errorf("%s err: %v", name, err)
 				}
-				outp.Add(name, digest)
+				log.Printf("%s matched tag: %s", name, tag)
+				outp.Add(name, image)
+			case "semver":
+				var s plugin.Semver
+				image, tag, err := s.Get(ctx, entry.Container)
+				if err != nil {
+					return fmt.Errorf("%s err: %v", name, err)
+				}
+				log.Printf("%s matched tag: %s", name, tag)
+				outp.Add(name, image)
+			default:
+				return fmt.Errorf("unknown update type: %s", entry.UpdateType)
 			}
 			return nil
 		})

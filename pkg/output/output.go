@@ -7,7 +7,7 @@ import (
 )
 
 type Output struct {
-	sync.RWMutex
+	mutex      sync.RWMutex
 	Containers map[string]string `yaml:"containers"`
 }
 
@@ -18,9 +18,9 @@ func NewOutput() *Output {
 }
 
 func (o *Output) Add(key, value string) {
-	o.Lock()
+	o.mutex.Lock()
 	o.Containers[key] = value
-	o.Unlock()
+	o.mutex.Unlock()
 }
 
 func (o *Output) Marshal() ([]byte, error) {
