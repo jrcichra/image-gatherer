@@ -26,25 +26,25 @@ func main() {
 		name, entry := name, entry // scoping
 		g.Go(func() error {
 			name, entry := name, entry // scoping
+			var (
+				image string
+				tag   string
+				err   error
+			)
 			switch entry.UpdateType {
 			case "git":
-				image, tag, err := entry.Git.Get(ctx, entry.Container)
-				if err != nil {
-					return fmt.Errorf("%s err: %v", name, err)
-				}
-				log.Printf("%s matched tag: %s", name, tag)
-				outp.Add(name, image)
+				image, tag, err = entry.Git.Get(ctx, entry.Container)
 			case "semver":
 				var s plugin.Semver
-				image, tag, err := s.Get(ctx, entry.Container)
-				if err != nil {
-					return fmt.Errorf("%s err: %v", name, err)
-				}
-				log.Printf("%s matched tag: %s", name, tag)
-				outp.Add(name, image)
+				image, tag, err = s.Get(ctx, entry.Container)
 			default:
 				return fmt.Errorf("unknown update type: %s", entry.UpdateType)
 			}
+			if err != nil {
+				return fmt.Errorf("%s err: %v", name, err)
+			}
+			log.Printf("%s matched tag: %s", name, tag)
+			outp.Add(name, image)
 			return nil
 		})
 	}
