@@ -19,10 +19,12 @@ func NewOutput() *Output {
 
 func (o *Output) Add(key, value string) {
 	o.mutex.Lock()
+	defer o.mutex.Unlock()
 	o.Containers[key] = value
-	o.mutex.Unlock()
 }
 
 func (o *Output) Marshal() ([]byte, error) {
+	o.mutex.RLock()
+	defer o.mutex.RUnlock()
 	return yaml.Marshal(o)
 }
