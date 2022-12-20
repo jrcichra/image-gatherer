@@ -1,0 +1,14 @@
+# update types:
+# git - look at the latest commit on the branch and find a tag with the commit
+# semver - grab the latest semver from the container registry
+
+containers:
+  bitwarden-secrets-operator:
+    container: ghcr.io/jrcichra/bitwarden-secrets-operator
+    update_type: git
+    git:
+      url: https://github.com/jrcichra/bitwarden-secrets-operator.git
+      branch: master
+  busybox:
+    container: docker.io/busybox
+    update_type: semver
