@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 
@@ -12,8 +13,11 @@ import (
 )
 
 func main() {
+	configFile := flag.String("config", "config.yaml", "path to configuration file")
+	flag.Parse()
+
 	// load the configuration file
-	c := config.LoadConfigOrDie("config.yaml")
+	c := config.LoadConfigOrDie(*configFile)
 	// make an errgroup which will run through each container
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
