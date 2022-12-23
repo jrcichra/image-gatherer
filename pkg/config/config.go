@@ -3,19 +3,23 @@ package config
 import (
 	"os"
 
-	"github.com/jrcichra/latest-image-gatherer/pkg/plugin"
 	"gopkg.in/yaml.v3"
 )
 
-type Entry struct {
-	Container  string `yaml:"container"`
-	UpdateType string `yaml:"update_type"`
-	// plugin types
-	Git plugin.Git `yaml:"git"`
+type Container struct {
+	Name       string            `yaml:"container"`
+	PluginName string            `yaml:"plugin"`
+	Options    map[string]string `yaml:"options"`
+}
+
+type Output struct {
+	PluginName string            `yaml:"plugin"`
+	Options    map[string]string `yaml:"options"`
 }
 
 type Config struct {
-	Entries map[string]Entry `yaml:"containers"`
+	Containers map[string]Container `yaml:"containers"`
+	Output     Output               `yaml:"output"`
 }
 
 func LoadConfig(path string) (Config, error) {

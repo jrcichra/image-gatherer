@@ -4,59 +4,58 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 
-	"github.com/jrcichra/latest-image-gatherer/pkg/config"
-	"github.com/jrcichra/latest-image-gatherer/pkg/output"
-	"github.com/jrcichra/latest-image-gatherer/pkg/plugin"
+	"github.com/jrcichra/image-gatherer/pkg/config"
+	"github.com/jrcichra/image-gatherer/pkg/plugin"
 
 	"golang.org/x/sync/errgroup"
 )
 
 func main() {
 	// load the configuration file
-	c := config.LoadConfigOrDie("config.yml")
+	c := config.LoadConfigOrDie("config.yaml")
 	// make an errgroup which will run through each container
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	g, ctx := errgroup.WithContext(ctx)
+	g, gctx := errgroup.WithContext(ctx)
 
-	outp := output.NewOutput()
-	for name, entry := range c.Entries {
+	var outp plugin.OutputPlugin
+	switch c.Output.PluginName {
+	case "file":
+		outp = &plugin.File{}
+	case "git":
+		outp = &plugin.Git{}
+	default:
+		log.Fatalf("unknown output plugin: %s", c.Output.PluginName)
+	}
+
+	for name, entry := range c.Containers {
 		name, entry := name, entry // scoping
 		g.Go(func() error {
 			name, entry := name, entry // scoping
-			var (
-				image string
-				tag   string
-				err   error
-			)
-			switch entry.UpdateType {
+			var p plugin.InputPlugin
+			switch entry.PluginName {
 			case "git":
-				image, tag, err = entry.Git.Get(ctx, entry.Container)
+				p = &plugin.Git{}
 			case "semver":
-				var s plugin.Semver
-				image, tag, err = s.Get(ctx, entry.Container)
+				p = &plugin.Semver{}
 			default:
-				return fmt.Errorf("unknown update type: %s", entry.UpdateType)
+				return fmt.Errorf("unknown plugin: %s", entry.PluginName)
 			}
+			digest, err := p.GetTag(gctx, entry.Name, entry.Options)
 			if err != nil {
 				return fmt.Errorf("%s err: %v", name, err)
 			}
-			log.Printf("%s matched tag: %s", name, tag)
-			outp.Add(name, image)
+			log.Printf("%s: %s", name, digest)
+			outp.Add(name, digest)
 			return nil
 		})
 	}
 	if err := g.Wait(); err != nil {
 		log.Fatalln(err)
 	}
-	// write out the file
-	b, err := outp.Marshal()
-	if err != nil {
-		log.Fatalln(err)
-	}
-	if err := os.WriteFile("output.yml", b, 0644); err != nil {
+	// handle the output
+	if err := outp.Synth(ctx, c.Output.Options); err != nil {
 		log.Fatalln(err)
 	}
 }

@@ -1,3 +1,0 @@
-containers:
-  bitwarden-secrets-operator: ghcr.io/jrcichra/bitwarden-secrets-operator@sha256:abcdefg
-  busybox: docker.io/busybox@sha256:abcdefg

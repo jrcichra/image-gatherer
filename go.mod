@@ -1,4 +1,4 @@
-module github.com/jrcichra/latest-image-gatherer
+module github.com/jrcichra/image-gatherer
 
 go 1.19
 
