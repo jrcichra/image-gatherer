@@ -7,9 +7,11 @@ import (
 	"os/user"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
@@ -186,7 +188,14 @@ func (g *Git) Synth(ctx context.Context, options map[string]string) error {
 		return err
 	}
 	message := fmt.Sprintf("chore: update %s", filename)
-	_, err = w.Commit(message, &git.CommitOptions{})
+	_, err = w.Commit(message, &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "Image Gatherer",
+			Email: "imagegatherer@jrcichra.dev",
+			When:  time.Now(),
+		},
+		AllowEmptyCommits: false,
+	})
 	if err != nil {
 		return err
 	}
