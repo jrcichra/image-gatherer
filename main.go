@@ -62,4 +62,5 @@ func main() {
 	if err := outp.Synth(ctx, c.Output.Options); err != nil {
 		log.Fatalln(err)
 	}
+	log.Println("success!")
 }
