@@ -155,6 +155,7 @@ func (g *Git) Synth(ctx context.Context, options map[string]string) error {
 		ReferenceName: plumbing.ReferenceName(fullBranchName),
 		SingleBranch:  true,
 		Auth:          auth,
+		Depth:         1,
 	})
 	if err != nil {
 		return err
