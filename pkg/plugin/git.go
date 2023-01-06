@@ -118,6 +118,12 @@ func (g *Git) GetTag(ctx context.Context, container string, options map[string]s
 			break
 		}
 	}
+	matchedTag = strings.TrimSpace(matchedTag)
+	// error if the tag is empty
+	if matchedTag == "" {
+		return "", fmt.Errorf("matchedTag was empty")
+	}
+
 	// get the digest for this tag
 	// digest, err := r.GetDigestFromTag(ctx, container, matchedTag)
 	// if err != nil {

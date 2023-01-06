@@ -3,25 +3,25 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"log"
+	"os"
+	"os/signal"
 
 	"github.com/jrcichra/image-gatherer/pkg/config"
 	"github.com/jrcichra/image-gatherer/pkg/plugin"
-
-	"golang.org/x/sync/errgroup"
+	"github.com/sourcegraph/conc"
 )
 
 func main() {
 	configFile := flag.String("config", "config.yaml", "path to configuration file")
 	flag.Parse()
 
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+
 	// load the configuration file
 	c := config.LoadConfigOrDie(*configFile)
-	// make an errgroup which will run through each container
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	g, gctx := errgroup.WithContext(ctx)
+	var g conc.WaitGroup
 
 	var outp plugin.OutputPlugin
 	switch c.Output.PluginName {
@@ -35,7 +35,7 @@ func main() {
 
 	for name, entry := range c.Containers {
 		name, entry := name, entry // scoping
-		g.Go(func() error {
+		g.Go(func() {
 			name, entry := name, entry // scoping
 			var p plugin.InputPlugin
 			switch entry.PluginName {
@@ -44,20 +44,17 @@ func main() {
 			case "semver":
 				p = &plugin.Semver{}
 			default:
-				return fmt.Errorf("unknown plugin: %s", entry.PluginName)
+				log.Printf("unknown plugin: %s", entry.PluginName)
 			}
-			digest, err := p.GetTag(gctx, entry.Name, entry.Options)
+			digest, err := p.GetTag(ctx, entry.Name, entry.Options)
 			if err != nil {
-				return fmt.Errorf("%s err: %v", name, err)
+				log.Printf("%s err: %v", name, err)
 			}
 			log.Printf("%s: %s", name, digest)
 			outp.Add(name, digest)
-			return nil
 		})
 	}
-	if err := g.Wait(); err != nil {
-		log.Fatalln(err)
-	}
+	g.Wait()
 	// handle the output
 	if err := outp.Synth(ctx, c.Output.Options); err != nil {
 		log.Fatalln(err)
