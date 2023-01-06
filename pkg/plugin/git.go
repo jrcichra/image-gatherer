@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -66,6 +67,18 @@ func (g *Git) GetTag(ctx context.Context, container string, options map[string]s
 	if err != nil {
 		return "", err
 	}
+
+	// get tags from registry
+	r, err := registry.NewRegistry(container)
+	if err != nil {
+		return "", err
+	}
+	tags, err := r.GetAllTags(ctx, container)
+	if err != nil {
+		return "", err
+	}
+
+	// parse git commits
 	fullBranchName := fmt.Sprintf("refs/heads/%s", branch)
 	auth, err := buildAuth(username, password, ssh)
 	if err != nil {
@@ -89,45 +102,39 @@ func (g *Git) GetTag(ctx context.Context, container string, options map[string]s
 	if err != nil {
 		return "", err
 	}
+
 	commit, err := repo.CommitObject(ref.Hash())
-	if err != nil {
-		return "", err
-	}
-	if commit == nil {
-		return "", fmt.Errorf("commit returned was nil")
-	}
-	fullHash := commit.Hash.String()
-	r, err := registry.NewRegistry(container)
-	if err != nil {
-		return "", err
-	}
-	tags, err := r.GetAllTags(ctx, container)
-	if err != nil {
-		return "", err
-	}
-	// loop through the tags and see if the hash is in there
-	// TODO improve regex for matching tags to hashes, or expose it
 	var matchedTag string
-	for _, tag := range tags {
-		// clean up the tag
-		trimmedTag := strings.TrimPrefix(tag, "sha-")
-		// is this tag part of the latest hash?
-		if strings.HasPrefix(fullHash, trimmedTag) || strings.HasSuffix(fullHash, trimmedTag) {
-			// found it
-			matchedTag = tag
-			break
+	for matchedTag == "" {
+		if err != nil {
+			return "", err
+		}
+		if commit == nil {
+			return "", fmt.Errorf("commit returned was nil")
+		}
+		fullHash := commit.Hash.String()
+
+		// loop through the tags and see if the hash is in there
+		// TODO improve regex for matching tags to hashes, or expose it
+		for _, tag := range tags {
+			// clean up the tag
+			trimmedTag := strings.TrimPrefix(tag, "sha-")
+			// is this tag part of the latest hash?
+			if strings.HasPrefix(fullHash, trimmedTag) || strings.HasSuffix(fullHash, trimmedTag) {
+				// found it
+				matchedTag = tag
+				break
+			}
+		}
+		// if we didn't match, check the next parent
+		if matchedTag == "" {
+			log.Printf("%s: container image for %s not found. Checking parent...", container, fullHash)
+			commit, err = commit.Parents().Next()
+			if err != nil {
+				return "", err
+			}
 		}
 	}
-	// error if matchedTag was never set
-	if matchedTag == "" {
-		return "", fmt.Errorf("could not find container for latest commit")
-	}
-
-	// get the digest for this tag
-	// digest, err := r.GetDigestFromTag(ctx, container, matchedTag)
-	// if err != nil {
-	// 	return "", err
-	// }
 
 	// the response should be the full output
 	result := fmt.Sprintf("%s:%s", container, matchedTag)
