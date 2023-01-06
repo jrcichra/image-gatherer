@@ -118,10 +118,9 @@ func (g *Git) GetTag(ctx context.Context, container string, options map[string]s
 			break
 		}
 	}
-	matchedTag = strings.TrimSpace(matchedTag)
-	// error if the tag is empty
+	// error if matchedTag was never set
 	if matchedTag == "" {
-		return "", fmt.Errorf("matchedTag was empty")
+		return "", fmt.Errorf("could not find container for latest commit")
 	}
 
 	// get the digest for this tag
@@ -129,6 +128,7 @@ func (g *Git) GetTag(ctx context.Context, container string, options map[string]s
 	// if err != nil {
 	// 	return "", err
 	// }
+
 	// the response should be the full output
 	result := fmt.Sprintf("%s:%s", container, matchedTag)
 	return result, nil
