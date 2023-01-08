@@ -3,13 +3,17 @@ package plugin
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/blang/semver"
 	"github.com/jrcichra/image-gatherer/pkg/registry"
 )
 
 type Semver struct {
+}
+
+type Version struct {
+	version semver.Version
+	tag     string
 }
 
 func (s *Semver) GetTag(ctx context.Context, container string, options map[string]string) (string, error) {
@@ -22,24 +26,24 @@ func (s *Semver) GetTag(ctx context.Context, container string, options map[strin
 		return "", err
 	}
 	// build list of semver versions
-	versions := make([]semver.Version, 0, len(tags))
-	prefix := ""
+
+	versions := make([]Version, 0, len(tags))
 	for _, tag := range tags {
-		if strings.HasPrefix(tag, "v") {
-			prefix = "v"
-		}
 		v, err := semver.ParseTolerant(tag)
 		if err == nil {
-			versions = append(versions, v)
+			versions = append(versions, Version{
+				version: v,
+				tag:     tag,
+			})
 		}
 	}
 	// find the latest
-	var latest semver.Version
+	var latest Version
 	for _, v := range versions {
-		if v.GT(latest) {
+		if v.version.GT(latest.version) {
 			latest = v
 		}
 	}
-	result := fmt.Sprintf("%s:%s%s", container, prefix, latest.String())
+	result := fmt.Sprintf("%s:%s", container, latest.tag)
 	return result, nil
 }
