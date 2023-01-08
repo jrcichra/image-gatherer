@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/blang/semver"
 	"github.com/jrcichra/image-gatherer/pkg/registry"
@@ -22,7 +23,11 @@ func (s *Semver) GetTag(ctx context.Context, container string, options map[strin
 	}
 	// build list of semver versions
 	versions := make([]semver.Version, 0, len(tags))
+	prefix := ""
 	for _, tag := range tags {
+		if strings.HasPrefix("v", tag) {
+			prefix = "v"
+		}
 		v, err := semver.ParseTolerant(tag)
 		if err == nil {
 			versions = append(versions, v)
@@ -35,11 +40,6 @@ func (s *Semver) GetTag(ctx context.Context, container string, options map[strin
 			latest = v
 		}
 	}
-	// digest, err := r.GetDigestFromTag(ctx, container, latest.String())
-	// if err != nil {
-	// 	return "", err
-	// }
-	// the response should be the full output
-	result := fmt.Sprintf("%s:%s", container, latest.String())
+	result := fmt.Sprintf("%s:%s%s", container, prefix, latest.String())
 	return result, nil
 }
