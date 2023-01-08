@@ -25,7 +25,7 @@ func (s *Semver) GetTag(ctx context.Context, container string, options map[strin
 	versions := make([]semver.Version, 0, len(tags))
 	prefix := ""
 	for _, tag := range tags {
-		if strings.HasPrefix("v", tag) {
+		if strings.HasPrefix(tag, "v") {
 			prefix = "v"
 		}
 		v, err := semver.ParseTolerant(tag)
