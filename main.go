@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/jrcichra/image-gatherer/pkg/config"
 	"github.com/jrcichra/image-gatherer/pkg/plugin"
@@ -37,7 +38,11 @@ func main() {
 		name, entry := name, entry // scoping
 		if entry.Pin != "" {
 			log.Printf("pinning %s to %s. Skipping collection", name, entry.Pin)
-			outp.Add(name, entry.Pin)
+			separator := ":"
+			if strings.Contains(entry.Pin, "sha256") {
+				separator = "@"
+			}
+			outp.Add(name, fmt.Sprintf("%s%s%s", entry.Name, separator, entry.Pin))
 			continue
 		}
 		g.Go(func() error {
