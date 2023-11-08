@@ -35,6 +35,11 @@ func main() {
 
 	for name, entry := range c.Containers {
 		name, entry := name, entry // scoping
+		if entry.Pin != "" {
+			log.Printf("pinning %s to %s. Skipping collection", name, entry.Pin)
+			outp.Add(name, entry.Pin)
+			continue
+		}
 		g.Go(func() error {
 			name, entry := name, entry // scoping
 			var p plugin.InputPlugin

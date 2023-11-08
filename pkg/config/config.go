@@ -10,6 +10,7 @@ type Container struct {
 	Name       string            `yaml:"container"`
 	PluginName string            `yaml:"plugin"`
 	Options    map[string]string `yaml:"options"`
+	Pin        string            `yaml:"pin"`
 }
 
 type Output struct {
