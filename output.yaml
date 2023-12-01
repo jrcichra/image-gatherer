@@ -1,3 +1,4 @@
 containers:
-    bitwarden-secrets-operator: ghcr.io/jrcichra/bitwarden-secrets-operator:sha-5b171643
-    busybox: docker.io/library/busybox:1.36.0
+    bitwarden-secrets-operator: ghcr.io/jrcichra/bitwarden-secrets-operator:sha-ba020102
+    busybox: docker.io/library/busybox:1.36.1
+    gotosocial: docker.io/superseriousbusiness/gotosocial:0.12.2

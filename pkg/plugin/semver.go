@@ -3,6 +3,8 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/blang/semver"
 	"github.com/jrcichra/image-gatherer/pkg/registry"
@@ -16,7 +18,35 @@ type Version struct {
 	tag     string
 }
 
+func getIgnoreRegexes(regexStrings string) ([]*regexp.Regexp, error) {
+	ignoreRegexes := make([]*regexp.Regexp, 0)
+	if regexStrings == "" {
+		return ignoreRegexes, nil
+	}
+	for _, regexString := range strings.Split(regexStrings, ",") {
+		regex, err := regexp.Compile(regexString)
+		if err != nil {
+			return nil, err
+		}
+		ignoreRegexes = append(ignoreRegexes, regex)
+	}
+	return ignoreRegexes, nil
+}
+
+func matchesAnIgnoredRegex(version semver.Version, regexes []*regexp.Regexp) bool {
+	for _, regex := range regexes {
+		if regex.Match([]byte(version.String())) {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Semver) GetTag(ctx context.Context, container string, options map[string]string) (string, error) {
+	ignoreRegexes, err := getIgnoreRegexes(options["ignore_regexes"])
+	if err != nil {
+		return "", err
+	}
 	r, err := registry.NewRegistry(container)
 	if err != nil {
 		return "", err
@@ -30,7 +60,7 @@ func (s *Semver) GetTag(ctx context.Context, container string, options map[strin
 	versions := make([]Version, 0, len(tags))
 	for _, tag := range tags {
 		v, err := semver.ParseTolerant(tag)
-		if err == nil {
+		if err == nil && !matchesAnIgnoredRegex(v, ignoreRegexes) {
 			versions = append(versions, Version{
 				version: v,
 				tag:     tag,

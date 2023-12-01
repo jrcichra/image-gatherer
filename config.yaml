@@ -11,6 +11,11 @@ containers:
   busybox:
     container: docker.io/library/busybox
     plugin: semver
+  gotosocial:
+    container: docker.io/superseriousbusiness/gotosocial
+    plugin: semver
+    options:
+      ignore_regexes: "-rc\\d+"
 # output types
 # git - write the YAML to a file in a git repo
 # file - write the YAML to a file
