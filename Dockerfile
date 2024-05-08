@@ -1,4 +1,4 @@
-FROM golang:1.22.2-bullseye as firststage
+FROM golang:1.22.3-bullseye as firststage
 WORKDIR /image-gatherer
 ADD . .
 RUN CGO_ENABLED=0 go build -v -o image-gatherer .
