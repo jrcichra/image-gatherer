@@ -23,7 +23,7 @@ func main() {
 	var cfg cfg
 
 	flag.StringVar(&cfg.ConfigFile, "config", "config.yaml", "path to configuration file")
-	flag.DurationVar(&cfg.Interval, "config", time.Minute*5, "interval for runs")
+	flag.DurationVar(&cfg.Interval, "interval", time.Minute*5, "interval for runs")
 	flag.Parse()
 
 	// load the configuration file
