@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/jrcichra/image-gatherer/pkg/config"
 	"github.com/jrcichra/image-gatherer/pkg/plugin"
@@ -13,12 +14,31 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+type cfg struct {
+	ConfigFile string
+	Interval   time.Duration
+}
+
 func main() {
-	configFile := flag.String("config", "config.yaml", "path to configuration file")
+	var cfg cfg
+
+	flag.StringVar(&cfg.ConfigFile, "config", "config.yaml", "path to configuration file")
+	flag.DurationVar(&cfg.Interval, "config", time.Minute*5, "interval for runs")
 	flag.Parse()
 
 	// load the configuration file
-	c := config.LoadConfigOrDie(*configFile)
+	c := config.LoadConfigOrDie(cfg.ConfigFile)
+	for {
+		log.Println("starting run...")
+		if err := run(c); err != nil {
+			log.Println("run failed:", err)
+		}
+		log.Printf("run complete. Sleeping %s before next run\n", cfg.Interval.String())
+		time.Sleep(cfg.Interval)
+	}
+}
+
+func run(c config.Config) error {
 	// make an errgroup which will run through each container
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -31,7 +51,7 @@ func main() {
 	case "git":
 		outp = &plugin.Git{}
 	default:
-		log.Fatalf("unknown output plugin: %s", c.Output.PluginName)
+		return fmt.Errorf("unknown output plugin: %s", c.Output.PluginName)
 	}
 
 	for name, entry := range c.Containers {
@@ -66,11 +86,11 @@ func main() {
 		})
 	}
 	if err := g.Wait(); err != nil {
-		log.Fatalln(err)
+		return err
 	}
 	// handle the output
 	if err := outp.Synth(ctx, c.Output.Options); err != nil {
-		log.Fatalln(err)
+		return err
 	}
-	log.Println("success!")
+	return nil
 }
