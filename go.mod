@@ -2,7 +2,7 @@ module github.com/jrcichra/image-gatherer
 
 go 1.24.0
 
-toolchain go1.24.1
+toolchain go1.25.0
 
 require (
 	github.com/blang/semver v3.5.1+incompatible
