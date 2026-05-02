@@ -1,4 +1,4 @@
-FROM golang:1.26.0-bookworm as firststage
+FROM golang:1.26.2-bookworm as firststage
 WORKDIR /image-gatherer
 ADD . .
 RUN CGO_ENABLED=0 go build -v -o image-gatherer .
