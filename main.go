@@ -4,8 +4,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/jrcichra/image-gatherer/pkg/config"
@@ -26,22 +29,26 @@ func main() {
 	flag.DurationVar(&cfg.Interval, "interval", time.Minute*5, "interval for runs")
 	flag.Parse()
 
-	// load the configuration file
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	c := config.LoadConfigOrDie(cfg.ConfigFile)
 	for {
-		log.Println("starting run...")
-		if err := run(c); err != nil {
-			log.Println("run failed:", err)
+		slog.Info("starting run")
+		if err := run(ctx, c); err != nil {
+			slog.Error("run failed", "err", err)
 		}
-		log.Printf("run complete. Sleeping %s before next run\n", cfg.Interval.String())
-		time.Sleep(cfg.Interval)
+		slog.Info("run complete, sleeping", "interval", cfg.Interval)
+		select {
+		case <-ctx.Done():
+			slog.Info("shutting down")
+			return
+		case <-time.After(cfg.Interval):
+		}
 	}
 }
 
-func run(c config.Config) error {
-	// make an errgroup which will run through each container
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+func run(ctx context.Context, c config.Config) error {
 	g, gctx := errgroup.WithContext(ctx)
 
 	var outp plugin.OutputPlugin
@@ -55,9 +62,9 @@ func run(c config.Config) error {
 	}
 
 	for name, entry := range c.Containers {
-		name, entry := name, entry // scoping
+		name, entry := name, entry
 		if entry.Pin != "" {
-			log.Printf("pinning %s to %s. Skipping collection", name, entry.Pin)
+			slog.Info("pinning container", "name", name, "pin", entry.Pin)
 			separator := ":"
 			if strings.Contains(entry.Pin, "sha256") {
 				separator = "@"
@@ -66,7 +73,6 @@ func run(c config.Config) error {
 			continue
 		}
 		g.Go(func() error {
-			name, entry := name, entry // scoping
 			var p plugin.InputPlugin
 			switch entry.PluginName {
 			case "git":
@@ -76,21 +82,17 @@ func run(c config.Config) error {
 			default:
 				return fmt.Errorf("unknown plugin: %s", entry.PluginName)
 			}
-			digest, err := p.GetTag(gctx, entry.Name, entry.Options)
+			tag, err := p.GetTag(gctx, entry.Name, entry.Options)
 			if err != nil {
-				return fmt.Errorf("%s err: %v", name, err)
+				return fmt.Errorf("%s: %w", name, err)
 			}
-			log.Printf("%s: %s", name, digest)
-			outp.Add(name, digest)
+			slog.Info("resolved tag", "name", name, "tag", tag)
+			outp.Add(name, tag)
 			return nil
 		})
 	}
 	if err := g.Wait(); err != nil {
 		return err
 	}
-	// handle the output
-	if err := outp.Synth(ctx, c.Output.Options); err != nil {
-		return err
-	}
-	return nil
+	return outp.Synth(ctx, c.Output.Options)
 }

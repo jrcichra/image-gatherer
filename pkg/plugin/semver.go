@@ -10,8 +10,7 @@ import (
 	"github.com/jrcichra/image-gatherer/pkg/registry"
 )
 
-type Semver struct {
-}
+type Semver struct{}
 
 type Version struct {
 	version semver.Version
@@ -19,27 +18,41 @@ type Version struct {
 }
 
 func getIgnoreRegexes(regexStrings string) ([]*regexp.Regexp, error) {
-	ignoreRegexes := make([]*regexp.Regexp, 0)
 	if regexStrings == "" {
-		return ignoreRegexes, nil
+		return nil, nil
 	}
-	for _, regexString := range strings.Split(regexStrings, ",") {
+	parts := strings.Split(regexStrings, ",")
+	regexes := make([]*regexp.Regexp, 0, len(parts))
+	for _, regexString := range parts {
 		regex, err := regexp.Compile(regexString)
 		if err != nil {
 			return nil, err
 		}
-		ignoreRegexes = append(ignoreRegexes, regex)
+		regexes = append(regexes, regex)
 	}
-	return ignoreRegexes, nil
+	return regexes, nil
 }
 
 func matchesAnIgnoredRegex(version semver.Version, regexes []*regexp.Regexp) bool {
 	for _, regex := range regexes {
-		if regex.Match([]byte(version.String())) {
+		if regex.MatchString(version.String()) {
 			return true
 		}
 	}
 	return false
+}
+
+func findLatestVersion(versions []Version) (Version, error) {
+	if len(versions) == 0 {
+		return Version{}, fmt.Errorf("no valid semver tags found")
+	}
+	latest := versions[0]
+	for _, v := range versions[1:] {
+		if v.version.GT(latest.version) {
+			latest = v
+		}
+	}
+	return latest, nil
 }
 
 func (s *Semver) GetTag(ctx context.Context, container string, options map[string]string) (string, error) {
@@ -55,25 +68,18 @@ func (s *Semver) GetTag(ctx context.Context, container string, options map[strin
 	if err != nil {
 		return "", err
 	}
-	// build list of semver versions
 
 	versions := make([]Version, 0, len(tags))
 	for _, tag := range tags {
 		v, err := semver.ParseTolerant(tag)
 		if err == nil && !matchesAnIgnoredRegex(v, ignoreRegexes) {
-			versions = append(versions, Version{
-				version: v,
-				tag:     tag,
-			})
+			versions = append(versions, Version{version: v, tag: tag})
 		}
 	}
-	// find the latest
-	var latest Version
-	for _, v := range versions {
-		if v.version.GT(latest.version) {
-			latest = v
-		}
+
+	latest, err := findLatestVersion(versions)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", container, err)
 	}
-	result := fmt.Sprintf("%s:%s", container, latest.tag)
-	return result, nil
+	return fmt.Sprintf("%s:%s", container, latest.tag), nil
 }

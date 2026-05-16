@@ -3,7 +3,7 @@ package plugin
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -29,46 +29,77 @@ func getTempDir() (string, error) {
 	return os.MkdirTemp("", "")
 }
 
-func buildAuth(username, password, sshStr string) (transport.AuthMethod, error) {
-	var auth transport.AuthMethod
+func removeTempDir(path string) {
+	if err := os.RemoveAll(path); err != nil {
+		slog.Error("failed to remove temp dir", "path", path, "err", err)
+	}
+}
+
+func buildAuth(username, password, sshStr, sshKeyPath string) (transport.AuthMethod, error) {
 	if username != "" && password != "" {
-		auth = &http.BasicAuth{
-			Username: username,
-			Password: password,
+		return &http.BasicAuth{Username: username, Password: password}, nil
+	}
+	if sshStr == "true" {
+		if sshKeyPath == "" {
+			u, err := user.Current()
+			if err != nil {
+				return nil, err
+			}
+			sshKeyPath = filepath.Join(u.HomeDir, ".ssh", "id_rsa")
 		}
-	} else if sshStr == "true" {
-		user, err := user.Current()
-		if err != nil {
-			return auth, err
-		}
-		// TODO make SSH more configurable
-		homedir := fmt.Sprintf("%s/.ssh/id_rsa", user.HomeDir)
-		auth, err = ssh.NewPublicKeysFromFile("git", homedir, "")
-		if err != nil {
-			return auth, err
+		return ssh.NewPublicKeysFromFile("git", sshKeyPath, "")
+	}
+	return nil, nil
+}
+
+// isHexString reports whether s is a non-empty string of hex digits.
+func isHexString(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
 		}
 	}
-	return auth, nil
+	return true
+}
+
+// findMatchingTag looks for a tag whose hex portion (after stripping a "sha-"
+// prefix) is a prefix of fullHash. Requires at least 7 hex chars to avoid
+// accidental matches.
+func findMatchingTag(fullHash string, tags []string) string {
+	for _, tag := range tags {
+		trimmedTag := strings.TrimPrefix(tag, "sha-")
+		if len(trimmedTag) < 7 || !isHexString(trimmedTag) {
+			continue
+		}
+		if strings.HasPrefix(fullHash, trimmedTag) {
+			return tag
+		}
+	}
+	return ""
 }
 
 func (g *Git) GetTag(ctx context.Context, container string, options map[string]string) (string, error) {
+	url := options["url"]
+	branch := options["branch"]
+	if url == "" {
+		return "", fmt.Errorf("git input plugin: url option is required")
+	}
+	if branch == "" {
+		return "", fmt.Errorf("git input plugin: branch option is required")
+	}
+
 	username, _ := os.LookupEnv(options["username_env"])
 	password, _ := os.LookupEnv(options["password_env"])
-	ssh := options["ssh"]
-	branch := options["branch"]
-	url := options["url"]
-	tempDir, err := getTempDir()
-	defer func() {
-		err = os.RemoveAll(tempDir)
-		if err != nil {
-			panic(err)
-		}
-	}()
+	sshKeyPath := options["ssh_key_path"]
+
+	auth, err := buildAuth(username, password, options["ssh"], sshKeyPath)
 	if err != nil {
 		return "", err
 	}
 
-	// get tags from registry
 	r, err := registry.NewRegistry(container)
 	if err != nil {
 		return "", err
@@ -78,12 +109,13 @@ func (g *Git) GetTag(ctx context.Context, container string, options map[string]s
 		return "", err
 	}
 
-	// parse git commits
-	fullBranchName := fmt.Sprintf("refs/heads/%s", branch)
-	auth, err := buildAuth(username, password, ssh)
+	tempDir, err := getTempDir()
 	if err != nil {
 		return "", err
 	}
+	defer removeTempDir(tempDir)
+
+	fullBranchName := fmt.Sprintf("refs/heads/%s", branch)
 	_, err = git.PlainCloneContext(ctx, tempDir, false, &git.CloneOptions{
 		URL:           url,
 		ReferenceName: plumbing.ReferenceName(fullBranchName),
@@ -97,7 +129,6 @@ func (g *Git) GetTag(ctx context.Context, container string, options map[string]s
 	if err != nil {
 		return "", err
 	}
-
 	ref, err := repo.Reference(plumbing.ReferenceName(fullBranchName), true)
 	if err != nil {
 		return "", err
@@ -110,58 +141,59 @@ func (g *Git) GetTag(ctx context.Context, container string, options map[string]s
 			return "", err
 		}
 		if commit == nil {
-			return "", fmt.Errorf("commit returned was nil")
+			return "", fmt.Errorf("commit is nil")
 		}
 		fullHash := commit.Hash.String()
-
-		// loop through the tags and see if the hash is in there
-		// TODO improve regex for matching tags to hashes, or expose it
-		for _, tag := range tags {
-			// clean up the tag
-			trimmedTag := strings.TrimPrefix(tag, "sha-")
-			// is this tag part of the latest hash?
-			if strings.HasPrefix(fullHash, trimmedTag) || strings.HasSuffix(fullHash, trimmedTag) {
-				// found it
-				matchedTag = tag
-				break
-			}
-		}
-		// if we didn't match, check the next parent
+		matchedTag = findMatchingTag(fullHash, tags)
 		if matchedTag == "" {
-			log.Printf("%s: container image for %s not found. Checking parent...", container, fullHash)
+			slog.Info("no image for commit, checking parent", "container", container, "hash", fullHash)
 			commit, err = commit.Parents().Next()
 			if err != nil {
-				return "", err
+				return "", fmt.Errorf("no matching container image found in commit history: %w", err)
 			}
 		}
 	}
 
-	// the response should be the full output
-	result := fmt.Sprintf("%s:%s", container, matchedTag)
-	return result, nil
+	return fmt.Sprintf("%s:%s", container, matchedTag), nil
 }
 
 var _ OutputPlugin = &Git{}
 
 func (g *Git) Synth(ctx context.Context, options map[string]string) error {
+	url := options["url"]
+	branch := options["branch"]
+	if url == "" {
+		return fmt.Errorf("git output plugin: url option is required")
+	}
+	if branch == "" {
+		return fmt.Errorf("git output plugin: branch option is required")
+	}
+
 	filename := options["filename"]
 	username, _ := os.LookupEnv(options["username_env"])
 	password, _ := os.LookupEnv(options["password_env"])
-	ssh := options["ssh"]
-	branch := options["branch"]
-	url := options["url"]
-	tempDir, err := getTempDir()
-	defer func() {
-		err = os.RemoveAll(tempDir)
-		if err != nil {
-			panic(err)
-		}
-	}()
+	sshKeyPath := options["ssh_key_path"]
 
-	auth, err := buildAuth(username, password, ssh)
+	authorName := options["commit_author_name"]
+	if authorName == "" {
+		authorName = "Image Gatherer"
+	}
+	authorEmail := options["commit_author_email"]
+	if authorEmail == "" {
+		authorEmail = "imagegatherer@jrcichra.dev"
+	}
+
+	auth, err := buildAuth(username, password, options["ssh"], sshKeyPath)
 	if err != nil {
 		return err
 	}
+
+	tempDir, err := getTempDir()
+	if err != nil {
+		return err
+	}
+	defer removeTempDir(tempDir)
+
 	fullBranchName := fmt.Sprintf("refs/heads/%s", branch)
 	repo, err := git.PlainCloneContext(ctx, tempDir, false, &git.CloneOptions{
 		URL:           url,
@@ -173,12 +205,14 @@ func (g *Git) Synth(ctx context.Context, options map[string]string) error {
 	if err != nil {
 		return err
 	}
+
 	fullPath := filepath.Join(tempDir, filename)
 	file, err := os.Create(fullPath)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
+
 	content, err := g.Marshal()
 	if err != nil {
 		return err
@@ -186,6 +220,7 @@ func (g *Git) Synth(ctx context.Context, options map[string]string) error {
 	if _, err := file.Write(content); err != nil {
 		return err
 	}
+
 	w, err := repo.Worktree()
 	if err != nil {
 		return err
@@ -194,18 +229,17 @@ func (g *Git) Synth(ctx context.Context, options map[string]string) error {
 	if err != nil {
 		return err
 	}
-	// do nothing if there's no change
 	if status.IsClean() {
+		slog.Info("no changes to commit", "filename", filename)
 		return nil
 	}
 	if _, err := w.Add(filename); err != nil {
 		return err
 	}
-	message := fmt.Sprintf("chore: update %s", filename)
-	_, err = w.Commit(message, &git.CommitOptions{
+	_, err = w.Commit(fmt.Sprintf("chore: update %s", filename), &git.CommitOptions{
 		Author: &object.Signature{
-			Name:  "Image Gatherer",
-			Email: "imagegatherer@jrcichra.dev",
+			Name:  authorName,
+			Email: authorEmail,
 			When:  time.Now(),
 		},
 		AllowEmptyCommits: false,
@@ -213,11 +247,5 @@ func (g *Git) Synth(ctx context.Context, options map[string]string) error {
 	if err != nil {
 		return err
 	}
-	err = repo.PushContext(ctx, &git.PushOptions{
-		Auth: auth,
-	})
-	if err != nil {
-		return err
-	}
-	return nil
+	return repo.PushContext(ctx, &git.PushOptions{Auth: auth})
 }
