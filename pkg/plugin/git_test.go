@@ -2,27 +2,6 @@ package plugin
 
 import "testing"
 
-func TestIsHexString(t *testing.T) {
-	tests := []struct {
-		input string
-		want  bool
-	}{
-		{"abc123", true},
-		{"ABCDEF", true},
-		{"0123456789abcdef", true},
-		{"abc123xyz", false},
-		{"g1234567", false},
-		{"", false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			if got := isHexString(tt.input); got != tt.want {
-				t.Errorf("isHexString(%q) = %v, want %v", tt.input, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestFindMatchingTag(t *testing.T) {
 	const fullHash = "abc1234567890abcdef1234567890abcdef123456"
 

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -52,18 +53,7 @@ func buildAuth(username, password, sshStr, sshKeyPath string) (transport.AuthMet
 	return nil, nil
 }
 
-// isHexString reports whether s is a non-empty string of hex digits.
-func isHexString(s string) bool {
-	if len(s) == 0 {
-		return false
-	}
-	for _, c := range s {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
-			return false
-		}
-	}
-	return true
-}
+var hexRe = regexp.MustCompile(`^[0-9a-fA-F]+$`)
 
 // findMatchingTag looks for a tag whose hex portion (after stripping a "sha-"
 // prefix) is a prefix of fullHash. Requires at least 7 hex chars to avoid
@@ -71,7 +61,7 @@ func isHexString(s string) bool {
 func findMatchingTag(fullHash string, tags []string) string {
 	for _, tag := range tags {
 		trimmedTag := strings.TrimPrefix(tag, "sha-")
-		if len(trimmedTag) < 7 || !isHexString(trimmedTag) {
+		if len(trimmedTag) < 7 || !hexRe.MatchString(trimmedTag) {
 			continue
 		}
 		if strings.HasPrefix(fullHash, trimmedTag) {
