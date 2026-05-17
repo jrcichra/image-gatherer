@@ -84,7 +84,8 @@ func run(ctx context.Context, c config.Config) error {
 			}
 			tag, err := p.GetTag(gctx, entry.Name, entry.Options)
 			if err != nil {
-				return fmt.Errorf("%s: %w", name, err)
+				slog.Error("failed to resolve tag, skipping", "name", name, "err", err)
+				return nil
 			}
 			slog.Info("resolved tag", "name", name, "tag", tag)
 			outp.Add(name, tag)
