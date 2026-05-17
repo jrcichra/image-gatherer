@@ -2,7 +2,6 @@ package registry
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
@@ -36,20 +35,4 @@ func (r *Registry) GetAllTags(ctx context.Context, repository string) ([]string,
 		return nil, err
 	}
 	return tags, nil
-}
-
-func (r *Registry) GetDigestFromTag(ctx context.Context, container, tag string) (string, error) {
-	tagObj, err := name.NewTag(fmt.Sprintf("%s:%s", container, tag), name.StrictValidation)
-	if err != nil {
-		return "", err
-	}
-	img, err := remote.Image(tagObj, remote.WithAuth(r.Auth), remote.WithContext(ctx))
-	if err != nil {
-		return "", err
-	}
-	digest, err := img.Digest()
-	if err != nil {
-		return "", err
-	}
-	return digest.String(), nil
 }

@@ -8,5 +8,6 @@ type InputPlugin interface {
 
 type OutputPlugin interface {
 	Add(key, value string)
-	Synth(ctx context.Context, options map[string]string) error
+	Open(ctx context.Context, options map[string]string) error
+	Close(ctx context.Context, options map[string]string) error
 }

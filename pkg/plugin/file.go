@@ -2,8 +2,9 @@ package plugin
 
 import (
 	"context"
-	"fmt"
 	"os"
+
+	"gopkg.in/yaml.v3"
 )
 
 type File struct {
@@ -12,14 +13,23 @@ type File struct {
 
 var _ OutputPlugin = &File{}
 
-func (f *File) Synth(ctx context.Context, options map[string]string) error {
+func (f *File) Open(_ context.Context, options map[string]string) error {
+	filename := options["name"]
+	existing, err := os.ReadFile(filename)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return yaml.Unmarshal(existing, &f.State)
+}
+
+func (f *File) Close(_ context.Context, options map[string]string) error {
 	filename := options["name"]
 	b, err := f.Marshal()
 	if err != nil {
 		return err
-	}
-	if filename == "" {
-		return fmt.Errorf("name: must be provided for output plugin: file")
 	}
 	return os.WriteFile(filename, b, 0644)
 }

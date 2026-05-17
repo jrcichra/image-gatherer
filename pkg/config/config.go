@@ -1,6 +1,7 @@
 package config
 
 import (
+	"log/slog"
 	"os"
 
 	"gopkg.in/yaml.v3"
@@ -38,7 +39,8 @@ func LoadConfig(path string) (Config, error) {
 func LoadConfigOrDie(path string) Config {
 	c, err := LoadConfig(path)
 	if err != nil {
-		panic(err)
+		slog.Error("failed to load config", "path", path, "err", err)
+		os.Exit(1)
 	}
 	return c
 }
