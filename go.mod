@@ -6,7 +6,7 @@ toolchain go1.26.2
 
 require (
 	github.com/blang/semver v3.5.1+incompatible
-	github.com/go-git/go-git/v5 v5.19.0
+	github.com/go-git/go-git/v5 v5.19.1
 	github.com/google/go-containerregistry v0.21.5
 	gopkg.in/yaml.v3 v3.0.1
 )
