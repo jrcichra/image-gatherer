@@ -68,6 +68,12 @@ func validateConfig(c config.Config) error {
 	return nil
 }
 
+// maxConcurrentResolutions bounds how many input plugins run at once. The
+// git plugin holds a shallow clone in memory for the duration of its
+// resolution, so unbounded concurrency scales the pod's peak memory with
+// the container count rather than with any single repo's size.
+const maxConcurrentResolutions = 8
+
 func run(ctx context.Context, c config.Config) error {
 	outp, err := plugin.NewOutputPlugin(c.Output.PluginName, c.Output.Options)
 	if err != nil {
@@ -79,6 +85,7 @@ func run(ctx context.Context, c config.Config) error {
 	}
 
 	var wg sync.WaitGroup
+	sem := make(chan struct{}, maxConcurrentResolutions)
 	for name, entry := range c.Containers {
 		name, entry := name, entry
 		if entry.Pin != "" {
@@ -94,6 +101,8 @@ func run(ctx context.Context, c config.Config) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
 			p, err := plugin.NewInputPlugin(entry.PluginName, entry.Options)
 			if err != nil {
 				slog.Error("failed to create input plugin, skipping", "name", name, "err", err)
