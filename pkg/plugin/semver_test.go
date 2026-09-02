@@ -18,9 +18,9 @@ func TestFindLatestVersion(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "single version",
+			name:     "single version",
 			versions: []Version{{version: semver.MustParse("1.0.0"), tag: "1.0.0"}},
-			wantTag: "1.0.0",
+			wantTag:  "1.0.0",
 		},
 		{
 			name: "picks latest",

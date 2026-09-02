@@ -121,12 +121,16 @@ output:
 ## Running
 
 ```sh
-# With defaults (config.yaml, 5 minute interval)
+# With defaults (config.yaml, 5 minute interval, 8 concurrent resolutions)
 ./image-gatherer
 
-# Custom config and interval
-./image-gatherer -config /etc/image-gatherer/config.yaml -interval 10m
+# Custom config, interval, and concurrency
+./image-gatherer -config /etc/image-gatherer/config.yaml -interval 10m -concurrency 4
 ```
+
+`-concurrency` caps how many input plugins resolve at once. The `git` plugin
+holds a shallow clone in memory per resolution, so this bounds peak memory
+under a large container count rather than letting it scale unbounded.
 
 ### Docker
 

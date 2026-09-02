@@ -17,8 +17,9 @@ import (
 )
 
 type cfg struct {
-	ConfigFile string
-	Interval   time.Duration
+	ConfigFile  string
+	Interval    time.Duration
+	Concurrency int
 }
 
 func main() {
@@ -26,6 +27,7 @@ func main() {
 
 	flag.StringVar(&cfg.ConfigFile, "config", "config.yaml", "path to configuration file")
 	flag.DurationVar(&cfg.Interval, "interval", time.Minute*5, "interval for runs")
+	flag.IntVar(&cfg.Concurrency, "concurrency", 8, "max input plugins resolved at once")
 	flag.Parse()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -40,7 +42,7 @@ func main() {
 
 	for {
 		slog.Info("starting run")
-		if err := run(ctx, c); err != nil {
+		if err := run(ctx, c, cfg.Concurrency); err != nil {
 			slog.Error("run failed", "err", err)
 		}
 		slog.Info("run complete, sleeping", "interval", cfg.Interval)
@@ -68,13 +70,7 @@ func validateConfig(c config.Config) error {
 	return nil
 }
 
-// maxConcurrentResolutions bounds how many input plugins run at once. The
-// git plugin holds a shallow clone in memory for the duration of its
-// resolution, so unbounded concurrency scales the pod's peak memory with
-// the container count rather than with any single repo's size.
-const maxConcurrentResolutions = 8
-
-func run(ctx context.Context, c config.Config) error {
+func run(ctx context.Context, c config.Config, concurrency int) error {
 	outp, err := plugin.NewOutputPlugin(c.Output.PluginName, c.Output.Options)
 	if err != nil {
 		return err
@@ -85,7 +81,10 @@ func run(ctx context.Context, c config.Config) error {
 	}
 
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, maxConcurrentResolutions)
+	// The git plugin holds a shallow clone in memory for the duration of its
+	// resolution, so unbounded concurrency scales the pod's peak memory with
+	// the container count rather than any single repo's size.
+	sem := make(chan struct{}, concurrency)
 	for name, entry := range c.Containers {
 		name, entry := name, entry
 		if entry.Pin != "" {
