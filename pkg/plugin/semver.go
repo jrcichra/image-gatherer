@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"runtime"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/blang/semver"
 	"github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 	"github.com/jrcichra/image-gatherer/pkg/registry"
 )
 
@@ -109,6 +111,14 @@ func (s *Semver) GetTag(ctx context.Context, container string, options map[strin
 		err := r.VerifyPull(ctx, v.tag, platform)
 		if err == nil {
 			return fmt.Sprintf("%s:%s", container, v.tag), nil
+		}
+		// A temporary registry error (e.g. rate limiting) says nothing about
+		// whether this tag is actually pullable — falling through to an older
+		// tag here would emit a stale version every time the rate limit is
+		// hit instead of just skipping this run, so bail out immediately.
+		var terr *transport.Error
+		if errors.As(err, &terr) && terr.Temporary() {
+			return "", fmt.Errorf("%s:%s: temporary registry error, aborting: %w", container, v.tag, err)
 		}
 		lastErr = fmt.Errorf("%s:%s is not pullable for %s/%s: %w",
 			container, v.tag, platform.OS, platform.Architecture, err)

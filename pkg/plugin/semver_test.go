@@ -2,12 +2,15 @@ package plugin
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"os"
 	"runtime"
 	"testing"
 
 	"github.com/blang/semver"
 	"github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 	"github.com/jrcichra/image-gatherer/pkg/registry"
 )
 
@@ -131,6 +134,25 @@ func TestTargetPlatform(t *testing.T) {
 			t.Errorf("targetPlatform() = %+v, want linux/%s", got, runtime.GOARCH)
 		}
 	})
+}
+
+// TestTemporaryRegistryErrorDetected guards the rate-limit-vs-real-error
+// distinction GetTag relies on: a 429 from the registry must be recognized as
+// temporary so the resolver aborts instead of silently falling back to an
+// older tag (this is what caused nats/nginx/traefik to flap between the
+// latest and a stale version whenever Docker Hub rate-limited a run).
+func TestTemporaryRegistryErrorDetected(t *testing.T) {
+	rateLimited := &transport.Error{StatusCode: http.StatusTooManyRequests}
+	var terr *transport.Error
+	if !errors.As(error(rateLimited), &terr) || !terr.Temporary() {
+		t.Fatal("expected a 429 transport.Error to be detected as Temporary()")
+	}
+
+	notFound := &transport.Error{StatusCode: http.StatusNotFound}
+	terr = nil
+	if errors.As(error(notFound), &terr) && terr.Temporary() {
+		t.Fatal("expected a 404 transport.Error to NOT be treated as Temporary()")
+	}
 }
 
 // requireLiveTests skips network-dependent tests unless explicitly enabled, so
